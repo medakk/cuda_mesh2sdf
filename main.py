@@ -54,11 +54,13 @@ def cpu_version(mesh, N):
     nrrd.write('sdf.nrrd', sdf, header={'encoding': 'raw'})
 
 
+# sizes: 172 311 2636
+
 def gpu_version1(mesh, N):
     mod = SourceModule(open('mesh2sdf.cu').read())
 
     mesh2sdf = mod.get_function("mesh2sdf")
-    sdf = np.ones((64, 64, 64), dtype=np.float32) * 1e7
+    sdf = np.ones((N, N, N), dtype=np.float32) * 1e7
     sdf_gpu = drv.mem_alloc(sdf.nbytes)
     drv.memcpy_htod(sdf_gpu, sdf)
 
@@ -71,16 +73,17 @@ def gpu_version1(mesh, N):
     V_gpu = drv.In(V)
     F_gpu = drv.In(F)
 
-    for f in tqdm(range(F.shape[0])):
-        mesh2sdf(sdf_gpu, np.int32(64), np.int32(64), np.int32(64), V_gpu, F_gpu, np.int32(f),
-                block=(1, 8, 8), grid=(1, 8, 8))
+    mesh2sdf(sdf_gpu, np.int32(N), np.int32(N), np.int32(N), V_gpu, F_gpu, np.int32(F.shape[0]),
+            block=(1, 32, 32), grid=(1, 17, 17))
 
     drv.memcpy_dtoh(sdf, sdf_gpu)
     nrrd.write('sdf.nrrd', sdf, header={'encoding': 'raw'})
 
+    print(f'min: {sdf.min()}\nmax: {sdf.max()}')
+
 def main():
     mesh = trimesh.load('femur.ply')
-    N = 64
+    N = 544
 
     gpu_version1(mesh, N)
     # cpu_version(mesh, N)
